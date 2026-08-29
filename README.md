@@ -1,6 +1,7 @@
 # TCG Counter — Life & Match Tracker
 
 A responsive two-player TCG life counter and match tracker packaged for Android using **Capacitor**.
+You can test it on https://wisdomheiress.github.io/counter/
 
 ---
 

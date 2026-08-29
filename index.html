@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TCG Counter — Life &amp; Match Tracker</title>
+  <meta name="description" content="A responsive two-player TCG life counter. Track life points, XP, match scores, and round time with a clean, touch-optimized interface.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       RESET & BASE
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0A0A12;
+      color: #F5F5F5;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:focus { outline: none; }
+    button:focus-visible { outline: 2px solid rgba(255,255,255,0.5); outline-offset: 2px; }
+
+    :root {
+      --bg: #0A0A12;
+      --text: #F5F5F5;
+      --text-dim: rgba(245,245,245,0.45);
+      --glass: rgba(255,255,255,0.035);
+      --border: rgba(255,255,255,0.07);
+      --radius: 14px;
+      --radius-sm: 10px;
+    }
+
+    /* ============================================================
+       BOARD LAYOUT
+       ============================================================ */
+    .board {
+      display: grid;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+    }
+
+    @media (orientation: portrait) {
+      .board {
+        grid-template-rows: 1fr auto 1fr;
+        grid-template-areas: "opponent" "center" "player";
+      }
+    }
+    @media (orientation: landscape) {
+      .board {
+        grid-template-columns: 1fr auto 1fr;
+        grid-template-areas: "opponent center player";
+      }
+    }
+
+    /* ============================================================
+       PLAYER HALVES
+       ============================================================ */
+    .player-half {
+      position: relative;
+      overflow: hidden;
+      display: flex;
+    }
+    .player-half.opponent { grid-area: opponent; }
+    .player-half.player   { grid-area: player; }
+
+    /* Accent glow backdrop */
+    .player-half::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse at 50% 50%,
+        rgba(var(--accent-rgb), 0.12),
+        rgba(var(--accent-rgb), 0.03) 55%,
+        transparent 80%
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .player-inner {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 6px;
+    }
+
+    /* Opponent content is rotated 180° so the person across reads it normally */
+    .opponent .player-inner { transform: rotate(180deg); }
+
+    /* ============================================================
+       COUNTERS LAYOUT  (XP + Points side-by-side or stacked)
+       ============================================================ */
+    .counters-layout {
+      display: flex;
+      flex: 1;
+      gap: 5px;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    @media (orientation: portrait)  { .counters-layout { flex-direction: row;    } }
+    @media (orientation: landscape) { .counters-layout { flex-direction: column;  } }
+
+    /* ============================================================
+       POINTS AREA  (large primary counter)
+       ============================================================ */
+    .points-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-height: 0;
+    }
+
+    .points-btn {
+      flex: 0 0 auto;
+      height: clamp(32px, 7.5vh, 56px);
+      border-radius: var(--radius-sm);
+      background: rgba(var(--accent-rgb), 0.09);
+      border: 1px solid rgba(var(--accent-rgb), 0.14);
+      color: var(--accent);
+      font-size: 1.4rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s, transform 0.1s;
+    }
+    .points-btn:active {
+      background: rgba(var(--accent-rgb), 0.24);
+      transform: scale(0.96);
+    }
+
+    .points-display {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      min-height: 0;
+    }
+
+    .points-value {
+      font-size: clamp(2.8rem, 11vmin, 5.5rem);
+      font-weight: 900;
+      line-height: 1;
+      text-shadow: 0 0 40px rgba(var(--accent-rgb), 0.35);
+    }
+    .points-value.pop { animation: value-pop 0.18s ease; }
+
+    .points-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       XP AREA  (secondary counter)
+       ============================================================ */
+    .xp-area {
+      display: flex;
+      gap: 3px;
+      position: relative;
+    }
+
+    @media (orientation: portrait) {
+      .xp-area {
+        flex-direction: column;
+        width: clamp(48px, 13vw, 76px);
+      }
+    }
+    @media (orientation: landscape) {
+      .xp-area {
+        flex-direction: row;
+        height: clamp(38px, 7vh, 56px);
+      }
+      /* In landscape, swap button order so − is on one side and + on the other */
+      .xp-area { flex-direction: row; }
+      .xp-btn-minus { order: 1; }
+      .xp-display   { order: 2; }
+      .xp-btn-plus  { order: 3; }
+    }
+
+    .xp-btn {
+      border-radius: var(--radius-sm);
+      background: rgba(var(--accent-rgb), 0.07);
+      border: 1px solid rgba(var(--accent-rgb), 0.10);
+      color: var(--accent);
+      font-size: 1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s, transform 0.1s;
+    }
+    @media (orientation: portrait)  { .xp-btn { height: clamp(26px, 5.5vh, 44px); } }
+    @media (orientation: landscape) { .xp-btn { width:  clamp(34px, 5.5vw, 52px); } }
+
+    .xp-btn:active {
+      background: rgba(var(--accent-rgb), 0.2);
+      transform: scale(0.94);
+    }
+
+    .xp-display {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius-sm);
+      background: rgba(var(--accent-rgb), 0.04);
+    }
+
+    .xp-value {
+      font-size: clamp(1.1rem, 3.8vmin, 1.8rem);
+      font-weight: 700;
+      line-height: 1;
+    }
+    .xp-value.pop { animation: value-pop 0.18s ease; }
+
+    .xp-label {
+      font-size: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    /* Flash overlay inside XP display */
+    .xp-flash-bar {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .xp-flash-bar.flash-up   { animation: xp-flash-up   0.4s ease-out; }
+    .xp-flash-bar.flash-down { animation: xp-flash-down 0.4s ease-out; }
+
+    /* ============================================================
+       OPTIONS BUTTON  (color-picker trigger, small accent dot)
+       ============================================================ */
+    .options-btn {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.22);
+      background: var(--accent);
+      z-index: 3;
+      box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.35);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .options-btn:active { transform: scale(0.88); }
+
+    /* ============================================================
+       CENTER STRIP  (timer + match score)
+       ============================================================ */
+    .center-strip {
+      grid-area: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 5px 8px;
+      background: var(--glass);
+      z-index: 2;
+    }
+
+    @media (orientation: portrait) {
+      .center-strip {
+        flex-direction: row;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+    }
+    @media (orientation: landscape) {
+      .center-strip {
+        flex-direction: column;
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        min-width: 80px;
+        padding: 8px 5px;
+      }
+    }
+
+    /* ============================================================
+       MATCH ARROWS & SCORES
+       ============================================================ */
+    .match-arrow {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.05);
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s, transform 0.1s;
+      flex-shrink: 0;
+    }
+    .match-arrow:active {
+      background: rgba(255,255,255,0.14);
+      transform: scale(0.92);
+    }
+
+    .match-display {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex: 1;
+    }
+    @media (orientation: portrait)  { .match-display { flex-direction: row;    } }
+    @media (orientation: landscape) { .match-display { flex-direction: column;  } }
+
+    .match-score {
+      font-size: 1.25rem;
+      font-weight: 700;
+      min-width: 22px;
+      text-align: center;
+      transition: color 0.3s;
+    }
+
+    /* ============================================================
+       TIMER CIRCLE
+       ============================================================ */
+    .timer-circle {
+      width: clamp(52px, 11vmin, 76px);
+      height: clamp(52px, 11vmin, 76px);
+      border-radius: 50%;
+      background: rgba(255,255,255,0.035);
+      border: 2px solid rgba(255,255,255,0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .timer-circle.running {
+      border-color: rgba(255,255,255,0.32);
+      animation: timer-pulse 2s ease-in-out infinite;
+    }
+
+    .timer-text {
+      font-size: clamp(0.72rem, 2.3vmin, 1rem);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.04em;
+    }
+
+    /* ============================================================
+       MODALS
+       ============================================================ */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    .modal-overlay.active { opacity: 1; pointer-events: all; }
+
+    .modal-card {
+      background: #16161F;
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: var(--radius);
+      padding: 24px 22px;
+      min-width: 260px;
+      max-width: 90vw;
+      transform: scale(0.92) translateY(8px);
+      transition: transform 0.22s ease;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.55);
+    }
+    .modal-overlay.active .modal-card { transform: scale(1) translateY(0); }
+
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+      text-align: center;
+      letter-spacing: 0.02em;
+    }
+
+    /* ---- Color Swatches ---- */
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px 10px;
+      justify-items: center;
+      margin-bottom: 18px;
+    }
+
+    .color-swatch {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 3px solid transparent;
+      transition: transform 0.14s, border-color 0.14s, opacity 0.14s;
+      position: relative;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+    }
+    .color-swatch:active { transform: scale(0.92); }
+    .color-swatch.selected { border-color: #fff; }
+    .color-swatch.disabled { opacity: 0.2; cursor: not-allowed; pointer-events: none; }
+
+    .swatch-name {
+      position: absolute;
+      bottom: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.48rem;
+      color: var(--text-dim);
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    /* ---- Confirm / Cancel buttons ---- */
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+    .modal-btn {
+      flex: 1;
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: background 0.12s, transform 0.1s;
+    }
+    .modal-btn:active { transform: scale(0.96); }
+    .modal-btn.confirm { background: rgba(255,255,255,0.13); color: var(--text); }
+    .modal-btn.cancel  { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+
+    .modal-cancel-btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.05);
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: background 0.12s;
+    }
+
+    .confirm-text {
+      text-align: center;
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+
+    /* ============================================================
+       ANIMATIONS
+       ============================================================ */
+    @keyframes value-pop {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.08); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes xp-flash-up {
+      0%   { opacity: 0; background: rgba(var(--accent-rgb), 0.25); transform: scaleY(0); transform-origin: bottom; }
+      30%  { opacity: 1; transform: scaleY(1); }
+      100% { opacity: 0; transform: scaleY(1); }
+    }
+
+    @keyframes xp-flash-down {
+      0%   { opacity: 0; background: rgba(var(--accent-rgb), 0.25); transform: scaleY(0); transform-origin: top; }
+      30%  { opacity: 1; transform: scaleY(1); }
+      100% { opacity: 0; transform: scaleY(1); }
+    }
+
+    @keyframes timer-pulse {
+      0%, 100% { box-shadow: 0 0 10px rgba(255,255,255,0.04); }
+      50%      { box-shadow: 0 0 22px rgba(255,255,255,0.10); }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="board" id="board">
+
+    <!-- ===== OPPONENT HALF ===== -->
+    <section class="player-half opponent" id="opponent-half">
+      <div class="player-inner" id="opponent-inner">
+        <button class="options-btn" id="opponent-options" aria-label="Opponent color options"></button>
+        <div class="counters-layout">
+          <div class="xp-area" id="opponent-xp-area">
+            <button class="xp-btn xp-btn-plus" id="opponent-xp-plus" aria-label="Opponent XP increment">+</button>
+            <div class="xp-display">
+              <span class="xp-value" id="opponent-xp-value">0</span>
+              <span class="xp-label">XP</span>
+              <div class="xp-flash-bar" id="opponent-xp-flash"></div>
+            </div>
+            <button class="xp-btn xp-btn-minus" id="opponent-xp-minus" aria-label="Opponent XP decrement">−</button>
+          </div>
+          <div class="points-area" id="opponent-points-area">
+            <button class="points-btn" id="opponent-points-plus" aria-label="Opponent points increment">+</button>
+            <div class="points-display">
+              <span class="points-value" id="opponent-points-value">0</span>
+              <span class="points-label">Points</span>
+            </div>
+            <button class="points-btn" id="opponent-points-minus" aria-label="Opponent points decrement">−</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== CENTER STRIP ===== -->
+    <section class="center-strip" id="center-strip">
+      <button class="match-arrow" id="match-arrow-opponent" aria-label="Score match point for opponent">▼</button>
+      <div class="match-display">
+        <span class="match-score" id="opponent-match-score">0</span>
+        <div class="timer-circle" id="timer-circle">
+          <span class="timer-text" id="timer-text">00:00</span>
+        </div>
+        <span class="match-score" id="player-match-score">0</span>
+      </div>
+      <button class="match-arrow" id="match-arrow-player" aria-label="Score match point for player">▲</button>
+    </section>
+
+    <!-- ===== PLAYER HALF ===== -->
+    <section class="player-half player" id="player-half">
+      <div class="player-inner" id="player-inner">
+        <button class="options-btn" id="player-options" aria-label="Player color options"></button>
+        <div class="counters-layout">
+          <div class="xp-area" id="player-xp-area">
+            <button class="xp-btn xp-btn-plus" id="player-xp-plus" aria-label="Player XP increment">+</button>
+            <div class="xp-display">
+              <span class="xp-value" id="player-xp-value">0</span>
+              <span class="xp-label">XP</span>
+              <div class="xp-flash-bar" id="player-xp-flash"></div>
+            </div>
+            <button class="xp-btn xp-btn-minus" id="player-xp-minus" aria-label="Player XP decrement">−</button>
+          </div>
+          <div class="points-area" id="player-points-area">
+            <button class="points-btn" id="player-points-plus" aria-label="Player points increment">+</button>
+            <div class="points-display">
+              <span class="points-value" id="player-points-value">0</span>
+              <span class="points-label">Points</span>
+            </div>
+            <button class="points-btn" id="player-points-minus" aria-label="Player points decrement">−</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== COLOR PICKER MODAL ===== -->
+  <div class="modal-overlay" id="color-modal">
+    <div class="modal-card">
+      <h3 class="modal-title">Choose Color</h3>
+      <div class="color-grid" id="color-grid"></div>
+      <button class="modal-cancel-btn" id="color-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ===== MATCH-SCORE CONFIRM MODAL ===== -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-card">
+      <p class="confirm-text" id="confirm-text"></p>
+      <div class="modal-actions">
+        <button class="modal-btn confirm" id="confirm-yes">Confirm</button>
+        <button class="modal-btn cancel"  id="confirm-no">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       JAVASCRIPT
+       ============================================================ -->
+  <script>
+    /* ======================================================
+     * CONFIGURATION — edit these constants to change defaults
+     * ====================================================== */
+
+    // Default colors assigned on page load (must be a key from COLORS)
+    const DEFAULT_PLAYER_COLOR   = 'yellow';
+    const DEFAULT_OPPONENT_COLOR = 'purple';
+
+    // Color palette inspired by Riftbound runes
+    const COLORS = {
+      yellow : { name: 'Gold',     hex: '#C9A227', rgb: '201,162,39'  },
+      purple : { name: 'Mauve',    hex: '#7B4FA0', rgb: '123,79,160'  },
+      blue   : { name: 'Mind',     hex: '#3A7BD5', rgb: '58,123,213'  },
+      red    : { name: 'Fury',     hex: '#C62828', rgb: '198,40,40'   },
+      green  : { name: 'Nature',   hex: '#2D7D4F', rgb: '45,125,79'   },
+      orange : { name: 'Body',     hex: '#D84315', rgb: '216,67,21'   },
+      black  : { name: 'Shadow',   hex: '#546E7A', rgb: '84,110,122'  },
+      white  : { name: 'Light',    hex: '#E8DCC8', rgb: '232,220,200' },
+    };
+
+    // Display order in the color picker
+    const COLOR_ORDER = ['yellow', 'purple', 'blue', 'red', 'green', 'orange', 'black', 'white'];
+
+    // Timer caps at 99:59
+    const TIMER_MAX = 99 * 60 + 59;
+
+    /* ======================================================
+     * STATE
+     * ====================================================== */
+    const state = {
+      player:   { points: 0, xp: 0, color: DEFAULT_PLAYER_COLOR   },
+      opponent: { points: 0, xp: 0, color: DEFAULT_OPPONENT_COLOR },
+      match:    { opponent: 0, player: 0 },
+      timer:    { seconds: 0, running: false, interval: null },
+    };
+
+    /* ======================================================
+     * DOM REFERENCES
+     * ====================================================== */
+    const $ = id => document.getElementById(id);
+
+    const dom = {
+      opponentHalf   : $('opponent-half'),
+      playerHalf     : $('player-half'),
+      opponentPts    : $('opponent-points-value'),
+      playerPts      : $('player-points-value'),
+      opponentXp     : $('opponent-xp-value'),
+      playerXp       : $('player-xp-value'),
+      opponentXpFlash: $('opponent-xp-flash'),
+      playerXpFlash  : $('player-xp-flash'),
+      opponentMatch  : $('opponent-match-score'),
+      playerMatch    : $('player-match-score'),
+      timerCircle    : $('timer-circle'),
+      timerText      : $('timer-text'),
+      colorModal     : $('color-modal'),
+      colorGrid      : $('color-grid'),
+      colorCancel    : $('color-cancel'),
+      confirmModal   : $('confirm-modal'),
+      confirmText    : $('confirm-text'),
+      confirmYes     : $('confirm-yes'),
+      confirmNo      : $('confirm-no'),
+      opponentOpts   : $('opponent-options'),
+      playerOpts     : $('player-options'),
+      arrowOpp       : $('match-arrow-opponent'),
+      arrowPlr       : $('match-arrow-player'),
+    };
+
+    /* ======================================================
+     * COLOR FUNCTIONS
+     * ====================================================== */
+    function applyColor(who, colorKey) {
+      const c = COLORS[colorKey];
+      const section  = who === 'player' ? dom.playerHalf : dom.opponentHalf;
+      const optsBtn  = who === 'player' ? dom.playerOpts : dom.opponentOpts;
+      const matchEl  = who === 'player' ? dom.playerMatch : dom.opponentMatch;
+      const arrow    = who === 'player' ? dom.arrowPlr   : dom.arrowOpp;
+
+      section.style.setProperty('--accent',     c.hex);
+      section.style.setProperty('--accent-rgb',  c.rgb);
+      optsBtn.style.background  = c.hex;
+      optsBtn.style.boxShadow   = `0 0 14px rgba(${c.rgb},0.35)`;
+      matchEl.style.color       = c.hex;
+      arrow.style.background    = `rgba(${c.rgb},0.12)`;
+      arrow.style.border        = `1px solid rgba(${c.rgb},0.22)`;
+      arrow.style.color         = c.hex;
+
+      state[who].color = colorKey;
+    }
+
+    /* --- Color-picker modal --- */
+    let colorModalTarget = null;   // 'player' | 'opponent'
+
+    function openColorModal(who) {
+      colorModalTarget = who;
+      const otherColor   = who === 'player' ? state.opponent.color : state.player.color;
+      const currentColor = state[who].color;
+
+      dom.colorGrid.innerHTML = '';
+      COLOR_ORDER.forEach(key => {
+        const c = COLORS[key];
+        const btn = document.createElement('button');
+        btn.className = 'color-swatch';
+        btn.style.background = c.hex;
+        btn.setAttribute('aria-label', c.name);
+
+        if (key === currentColor) btn.classList.add('selected');
+        if (key === otherColor)   btn.classList.add('disabled');
+
+        const label = document.createElement('span');
+        label.className = 'swatch-name';
+        label.textContent = c.name;
+        btn.appendChild(label);
+
+        btn.addEventListener('click', () => {
+          if (key === otherColor) return;
+          applyColor(who, key);
+          closeModal(dom.colorModal);
+        });
+
+        dom.colorGrid.appendChild(btn);
+      });
+
+      openModal(dom.colorModal);
+    }
+
+    /* ======================================================
+     * MODAL HELPERS
+     * ====================================================== */
+    function openModal(el)  { el.classList.add('active'); }
+    function closeModal(el) { el.classList.remove('active'); }
+
+    /* --- Confirm modal (returns a Promise<boolean>) --- */
+    let confirmResolve = null;
+
+    function showConfirm(message) {
+      return new Promise(resolve => {
+        dom.confirmText.textContent = message;
+        confirmResolve = resolve;
+        openModal(dom.confirmModal);
+      });
+    }
+
+    function resolveConfirm(result) {
+      closeModal(dom.confirmModal);
+      if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+    }
+
+    /* ======================================================
+     * POINTS
+     * ====================================================== */
+    function changePoints(who, delta) {
+      state[who].points = Math.max(0, state[who].points + delta);
+      const el = who === 'player' ? dom.playerPts : dom.opponentPts;
+      el.textContent = state[who].points;
+      triggerPop(el);
+    }
+
+    /* ======================================================
+     * XP
+     * ====================================================== */
+    function changeXp(who, delta) {
+      state[who].xp = Math.max(0, state[who].xp + delta);
+      const el    = who === 'player' ? dom.playerXp      : dom.opponentXp;
+      const flash = who === 'player' ? dom.playerXpFlash  : dom.opponentXpFlash;
+
+      el.textContent = state[who].xp;
+      triggerPop(el);
+
+      // Flash animation
+      flash.classList.remove('flash-up', 'flash-down');
+      void flash.offsetWidth;                               // force reflow
+      flash.classList.add(delta > 0 ? 'flash-up' : 'flash-down');
+    }
+
+    /* ======================================================
+     * MATCH SCORE
+     * ====================================================== */
+    async function scoreMatch(who) {
+      const label = who === 'player' ? 'Player' : 'Opponent';
+      const ok = await showConfirm(`Score match point for ${label}?`);
+      if (!ok) return;
+      state.match[who]++;
+      const el = who === 'player' ? dom.playerMatch : dom.opponentMatch;
+      el.textContent = state.match[who];
+    }
+
+    /* ======================================================
+     * TIMER
+     * ====================================================== */
+    function toggleTimer() {
+      if (state.timer.running) {
+        clearInterval(state.timer.interval);
+        state.timer.running = false;
+        dom.timerCircle.classList.remove('running');
+      } else {
+        if (state.timer.seconds >= TIMER_MAX) return;
+        state.timer.interval = setInterval(() => {
+          state.timer.seconds++;
+          renderTimer();
+          if (state.timer.seconds >= TIMER_MAX) {
+            clearInterval(state.timer.interval);
+            state.timer.running = false;
+            dom.timerCircle.classList.remove('running');
+          }
+        }, 1000);
+        state.timer.running = true;
+        dom.timerCircle.classList.add('running');
+      }
+    }
+
+    function resetTimer() {
+      clearInterval(state.timer.interval);
+      state.timer.running = false;
+      state.timer.seconds = 0;
+      dom.timerCircle.classList.remove('running');
+      renderTimer();
+    }
+
+    function renderTimer() {
+      const m = Math.floor(state.timer.seconds / 60);
+      const s = state.timer.seconds % 60;
+      dom.timerText.textContent =
+        String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    }
+
+    /* ======================================================
+     * UTILITY — pop animation
+     * ====================================================== */
+    function triggerPop(el) {
+      el.classList.remove('pop');
+      void el.offsetWidth;
+      el.classList.add('pop');
+    }
+
+    /* ======================================================
+     * EVENT LISTENERS
+     * ====================================================== */
+
+    // Points
+    $('opponent-points-plus').addEventListener('click',  () => changePoints('opponent',  1));
+    $('opponent-points-minus').addEventListener('click', () => changePoints('opponent', -1));
+    $('player-points-plus').addEventListener('click',    () => changePoints('player',    1));
+    $('player-points-minus').addEventListener('click',   () => changePoints('player',   -1));
+
+    // XP
+    $('opponent-xp-plus').addEventListener('click',  () => changeXp('opponent',  1));
+    $('opponent-xp-minus').addEventListener('click', () => changeXp('opponent', -1));
+    $('player-xp-plus').addEventListener('click',    () => changeXp('player',    1));
+    $('player-xp-minus').addEventListener('click',   () => changeXp('player',   -1));
+
+    // Match arrows
+    dom.arrowOpp.addEventListener('click', () => scoreMatch('opponent'));
+    dom.arrowPlr.addEventListener('click', () => scoreMatch('player'));
+
+    // Timer — single tap = toggle, double tap = reset
+    let tapTimeout = null;
+    dom.timerCircle.addEventListener('click', e => {
+      e.preventDefault();
+      if (tapTimeout) {
+        clearTimeout(tapTimeout);
+        tapTimeout = null;
+        resetTimer();
+      } else {
+        tapTimeout = setTimeout(() => { tapTimeout = null; toggleTimer(); }, 300);
+      }
+    });
+
+    // Color picker open
+    dom.opponentOpts.addEventListener('click', () => openColorModal('opponent'));
+    dom.playerOpts.addEventListener('click',   () => openColorModal('player'));
+
+    // Color picker close
+    dom.colorCancel.addEventListener('click', () => closeModal(dom.colorModal));
+    dom.colorModal.addEventListener('click', e => { if (e.target === dom.colorModal) closeModal(dom.colorModal); });
+
+    // Confirm modal
+    dom.confirmYes.addEventListener('click', () => resolveConfirm(true));
+    dom.confirmNo.addEventListener('click',  () => resolveConfirm(false));
+    dom.confirmModal.addEventListener('click', e => { if (e.target === dom.confirmModal) resolveConfirm(false); });
+
+    /* ======================================================
+     * INIT
+     * ====================================================== */
+    applyColor('player',   DEFAULT_PLAYER_COLOR);
+    applyColor('opponent', DEFAULT_OPPONENT_COLOR);
+    renderTimer();
+  </script>
+</body>
+</html>

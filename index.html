@@ -783,6 +783,24 @@
     }
 
     /* ======================================================
+     * RESET POINTS & XP
+     * ====================================================== */
+    function resetPointsAndXp() {
+      ['player', 'opponent'].forEach(p => {
+        state[p].points = 0;
+        state[p].xp = 0;
+      });
+      dom.playerPts.textContent = '0';
+      dom.opponentPts.textContent = '0';
+      dom.playerXp.textContent = '0';
+      dom.opponentXp.textContent = '0';
+      triggerPop(dom.playerPts);
+      triggerPop(dom.opponentPts);
+      triggerPop(dom.playerXp);
+      triggerPop(dom.opponentXp);
+    }
+
+    /* ======================================================
      * MATCH SCORE
      * ====================================================== */
     async function scoreMatch(who) {
@@ -792,6 +810,7 @@
       state.match[who]++;
       const el = who === 'player' ? dom.playerMatch : dom.opponentMatch;
       el.textContent = state.match[who];
+      resetPointsAndXp();
     }
 
     /* ======================================================
